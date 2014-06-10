@@ -3,41 +3,46 @@
 from urllib.request import urlopen
 from bs4 import BeautifulSoup
 import csv
-
+from pymongo import MongoClient
+from pandas import DataFrame
 
 								
-def pega_links():
+def rodaPesquisa():
+    client = MongoClient()
+    my_db = client["pesquisas_tse"]
+    my_collection = my_db["links"]
+    
     pesquisas_antigas = pesquisasAntigas()
-    with open("links_pesquisas.csv", "a", encoding='UTF8') as saida:
-        escrevedor = csv.writer(
-            saida,
-            delimiter=',',
-            quotechar='"',
-            quoting=csv.QUOTE_ALL)
         
-        lista_ufs = ['BR','AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
-        #para cada estado
-        for uf in lista_ufs:
-            pagina = 1
-            #limite máximo de páginas, escolhido arbitrariamente
-            while pagina < 10:
-                url = "http://pesqele.tse.jus.br/pesqele/publico/pesquisa/Pesquisa/consultarPesquisasPublica.action?dataFimRegistro=&action:pesquisa/Pesquisa/consultarPesquisasPublica=Consultar&municipioSelecionado=&d-4021255-p="+str(pagina)+"&dataInicioRegistro=&ufSelecionada="+uf+"&pesquisa.numeroProtocolo=&eleicaoSelecionada=3&empresaSelecionadaPublica="
-                page = BeautifulSoup(urlopen(url).read())
-                links = page.findAll('a',{'class':'visualizar'})
+    lista_ufs = ['BR','AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
+    contador = 1
+    #para cada estado
+    for uf in lista_ufs:
+        pagina = 1
+        #limite máximo de páginas, escolhido arbitrariamente
+        while pagina < 10:
+            url = "http://pesqele.tse.jus.br/pesqele/publico/pesquisa/Pesquisa/consultarPesquisasPublica.action?dataFimRegistro=&action:pesquisa/Pesquisa/consultarPesquisasPublica=Consultar&municipioSelecionado=&d-4021255-p="+str(pagina)+"&dataInicioRegistro=&ufSelecionada="+uf+"&pesquisa.numeroProtocolo=&eleicaoSelecionada=3&empresaSelecionadaPublica="
+            page = BeautifulSoup(urlopen(url).read())
+            links = page.findAll('a',{'class':'visualizar'})
 
-                #se não tiver link nenhum na página, saia do loop
-                if (not links): break
+            #se não tiver link nenhum na página, saia do loop
+            if (not links): break
             
-                #se tiver, escreve no arquivo
-                for link in links:
-                    #se o id do link já não estiver no antigo antigo
-                    id = link['href'].split("=")[2]
-                    if id not in pesquisas_antigas:
-                        print(uf+" - "+link['href'])
-                        escrevedor.writerow([uf,link['href']])
+            #se tiver, escreve no arquivo
+            for link in links:
+                #se o id do link já não estiver no antigo antigo
+                id = link['href'].split("=")[2]
+                if id not in pesquisas_antigas:
+                    print(str(contador) + " - " +uf+" - "+link['href'])
+                    #manda link pra bd
+                    my_collection.insert({"uf":uf,"link":link['href']})
+                    #scrapeia pagina
+                    adicionaPagina(link['href'])
+                    contador +=1
                     
-                pagina += 1
-        
+            pagina += 1
+    print(str(contador-1) +" novas pesquisas foram adicionadas ao banco de dados")
+            
         
 def scrape_pagina(url):
     page = BeautifulSoup(urlopen(url).read())
@@ -118,36 +123,31 @@ def scrape_pagina(url):
     return pesquisa
 
 def pesquisasAntigas():
-    lista_links = []
-    #pega todos os links antigos
-    with open("links_pesquisas.csv", "r", encoding='UTF8') as entrada:
-        leitor = csv.reader(entrada)
-        for row in leitor:
-            lista_links.append(row[1])
-        
-        #tira apenas os ids
-        lista_ids = [l.split("=")[2] for l in lista_links]
-        return lista_ids
+    client = MongoClient()
+    my_db = client["pesquisas_tse"]
+    my_collection = my_db["links"]
+    resultado = my_collection.find()
+    lista_links = [a["link"] for a in resultado]
+    lista_ids = [l.split("=")[2] for l in lista_links]
+    return lista_ids
     
-def roda_pesquisa():
-    with open("links_pesquisas.csv", "r", encoding='UTF8') as entrada, open("resultado_pesquisas.csv","a",encoding='UTF8') as saida:
-        leitor = csv.reader(entrada)
-        lista_links = []
-        for row in leitor:
-            lista_links.append("http://pesqele.tse.jus.br/"+row[1])
-        
-        resultado = []
-        contador = 1
-        for t in lista_links:
-            print("Checando o link número" + str(contador)+ "...")
-            resultado.append(scrape_pagina(t))
-            contador += 1
+def adicionaPagina(link):
+    link = "http://pesqele.tse.jus.br/"+link
+    client = MongoClient()
+    my_db = client["pesquisas_tse"]
+    my_collection = my_db["pesquisas"]
+    my_collection.insert(scrape_pagina(link))    
 
-        keys = list(resultado[0].keys())
-
-        dict_writer = csv.DictWriter(saida, keys)
-        dict_writer.writer.writerow(keys)
-        dict_writer.writerows(resultado)
-        
-pega_links()
+def consultaPesquisas():
+    client = MongoClient()
+    my_db = client["pesquisas_tse"]
+    my_collection = my_db["pesquisas"]
+    resultado = []
+    for a in my_collection.find():
+        resultado.append(a)
+    exportar = DataFrame(resultado)
+    exportar.to_csv("resultado_pesquisas.csv")
+    
+#rodaPesquisa()
+consultaPesquisas()
 
