@@ -10,7 +10,7 @@ from pandas import DataFrame
 def rodaPesquisa():
     client = MongoClient()
     my_db = client["pesquisas_tse"]
-    my_collection = my_db["links"]
+    my_collection = my_db["pesquisas"]
     
     pesquisas_antigas = pesquisasAntigas()
         
@@ -35,16 +35,14 @@ def rodaPesquisa():
                 id = link['href'].split("=")[2]
                 if id not in pesquisas_antigas:
                     print(str(contador) + " - " +uf+" - "+link['href'])
-                    #manda link pra bd
-                    my_collection.insert({"uf":uf,"link":link['href']})
                     #scrapeia pagina
                     resultado.append(adicionaPagina(link['href']))
                     contador +=1
-                    
             pagina += 1
     print(str(contador-1) +" novas pesquisas foram adicionadas ao banco de dados")
     exportar = DataFrame(resultado)
-    exportar.to_csv("resultado_pesquisas.csv")        
+    del exportar["_id"]
+    exportar.to_csv("/Users/rodrigoburgarelli/github/Pesquisas TSE/resultado_pesquisas.csv",index=False)
         
 def scrape_pagina(url):
     page = BeautifulSoup(urlopen(url).read())
@@ -117,14 +115,24 @@ def scrape_pagina(url):
     pesquisa["url"] = url
     pesquisa["uf"] = pesquisa["protocolo"][0:2]
     
+    #arruma as datas para ficar YY-mm-dd
+    data_termino = pesquisa["data_termino"].split("/")
+    pesquisa["data_termino"] = "20"+data_termino[2]+"-"+data_termino[1]+"-"+data_termino[0]
+    data_registro = pesquisa["data_registro"].split("/")
+    pesquisa["data_registro"] = data_registro[2]+"-"+data_registro[1]+"-"+data_registro[0]
+    data_inicio = pesquisa["data_inicio"].split("/")
+    pesquisa["data_inicio"] = "20"+data_inicio[2]+"-"+data_inicio[1]+"-"+data_inicio[0]
+    data_divulgacao = pesquisa["data_divulgacao"].split("/")
+    pesquisa["data_divulgacao"] = data_divulgacao[2]+"-"+data_divulgacao[1]+"-"+data_divulgacao[0]
+    
     return pesquisa
 
 def pesquisasAntigas():
     client = MongoClient()
     my_db = client["pesquisas_tse"]
-    my_collection = my_db["links"]
+    my_collection = my_db["pesquisas"]
     resultado = my_collection.find()
-    lista_links = [a["link"] for a in resultado]
+    lista_links = [a["url"] for a in resultado]
     lista_ids = [l.split("=")[2] for l in lista_links]
     return lista_ids
     
@@ -142,11 +150,16 @@ def consultaPesquisas():
     my_db = client["pesquisas_tse"]
     my_collection = my_db["pesquisas"]
     resultado = []
-    for a in my_collection.find():
+    for a in my_collection.find():        
         resultado.append(a)
-    exportar = DataFrame(resultado)
-    exportar.to_csv("resultado_pesquisas.csv")
     
+    print(resultado[1])
+    exportar = DataFrame(resultado)
+    del exportar["_id"]
+    exportar.to_csv("/Users/rodrigoburgarelli/github/Pesquisas TSE/resultado_pesquisas.csv",index=False)
+
+#print(pesquisasAntigas())
+
 rodaPesquisa()
 #consultaPesquisas()
 
