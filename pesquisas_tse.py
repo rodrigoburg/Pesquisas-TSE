@@ -16,6 +16,7 @@ def rodaPesquisa():
         
     lista_ufs = ['BR','AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO']
     contador = 1
+    resultado = []
     #para cada estado
     for uf in lista_ufs:
         pagina = 1
@@ -37,12 +38,13 @@ def rodaPesquisa():
                     #manda link pra bd
                     my_collection.insert({"uf":uf,"link":link['href']})
                     #scrapeia pagina
-                    adicionaPagina(link['href'])
+                    resultado.append(adicionaPagina(link['href']))
                     contador +=1
                     
             pagina += 1
     print(str(contador-1) +" novas pesquisas foram adicionadas ao banco de dados")
-            
+    exportar = DataFrame(resultado)
+    exportar.to_csv("resultado_pesquisas.csv")        
         
 def scrape_pagina(url):
     page = BeautifulSoup(urlopen(url).read())
@@ -51,11 +53,6 @@ def scrape_pagina(url):
     campos_bruto = str(page.findAll('fieldset')[0].getText())
     campos_consertando = campos_bruto.split('\n')
     
-   # print(campos_consertando)
-    #coloca NAs nos campos vazios
-    #for c in range(len(campos_consertando)):
-     #   if (campos_consertando[c] == '') & (campos_consertando[c-1] != 'Cargo(s):'):
-     #       campos_consertando[c] = "NA"
     #retira os characteres /r e /t e os elementos vazios
     campos_final = [c.replace("\t","").replace("\r","") for c in campos_consertando if (c != "") & (c.replace("\t","").replace("\r","") != "")]
     categorias = ['Número do protocolo:',
@@ -136,8 +133,10 @@ def adicionaPagina(link):
     client = MongoClient()
     my_db = client["pesquisas_tse"]
     my_collection = my_db["pesquisas"]
-    my_collection.insert(scrape_pagina(link))    
-
+    resultado = scrape_pagina(link)
+    my_collection.insert(resultado)   
+    return resultado
+    
 def consultaPesquisas():
     client = MongoClient()
     my_db = client["pesquisas_tse"]
@@ -148,6 +147,6 @@ def consultaPesquisas():
     exportar = DataFrame(resultado)
     exportar.to_csv("resultado_pesquisas.csv")
     
-#rodaPesquisa()
-consultaPesquisas()
+rodaPesquisa()
+#consultaPesquisas()
 
